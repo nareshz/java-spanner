@@ -151,6 +151,11 @@ import com.google.spanner.v1.TypeAnnotationCode;
 import com.google.spanner.v1.TypeCode;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
+
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -804,6 +809,7 @@ public class CloudClientExecutor extends CloudExecutor {
             .setHost(HOST_PREFIX + WorkerProxy.spannerPort)
             .setCredentials(credentials)
             .setChannelProvider(channelProvider)
+            .setEnableEndToEndTracing(/* enableEndToEndTracing= */ true)
             .setSessionPoolOption(sessionPoolOptions);
 
     SpannerStubSettings.Builder stubSettingsBuilder =
@@ -865,6 +871,45 @@ public class CloudClientExecutor extends CloudExecutor {
     return Status.OK;
   }
 
+  /* Get the action type for a spanner action. */
+  private String actionType(SpannerAction action) {
+    if (action.hasAdmin()) {
+      return "Admin";
+    } else if (action.hasStart()) {
+      return "Start";
+    } else if (action.hasFinish()) {
+      return "Finish";
+    } else if (action.hasMutation()) {
+      return "Mutation";
+    } else if (action.hasRead()) {
+      return "Read";
+    } else if (action.hasQuery()) {
+      return "Query";
+    } else if (action.hasDml()) {
+      return "Dml";
+    } else if (action.hasBatchDml()) {
+      return "BatchDml";
+    } else if (action.hasWrite()) {
+      return "Write";
+    } else if (action.hasStartBatchTxn()) {
+      return "StartBatchTxn";
+    } else if (action.hasGenerateDbPartitionsRead()) {
+      return "GenerateDbPartitionsRead";
+    } else if (action.hasGenerateDbPartitionsQuery()) {
+      return "GenerateDbPartitionsQuery";
+    } else if (action.hasExecutePartition()) {
+      return "ExecutePartition";
+    } else if (action.hasPartitionedUpdate()) {
+      return "PartitionedUpdate";
+    } else if (action.hasCloseBatchTxn()) {
+      return "CloseBatchTxn";
+    } else if (action.hasExecuteChangeStreamQuery()) {
+      return "ExecuteChangeStreamQuery";
+    } else {
+      return "NotValid";
+    }
+  }
+
   /** Execute actions by action case, using OutcomeSender to send status and results back. */
   private Status executeAction(
       OutcomeSender outcomeSender,
@@ -872,8 +917,15 @@ public class CloudClientExecutor extends CloudExecutor {
       String dbPath,
       boolean useMultiplexedSession,
       ExecutionFlowContext executionContext) {
-
-    try {
+    Tracer tracer = GlobalOpenTelemetry.getTracer(CloudClientExecutor.class.getName(), "0.1.0");
+    String spanName = "systestaction_" + actionType(action);
+    Span span = tracer.spanBuilder(spanName).startSpan();
+    LOGGER.log(
+        Level.INFO,
+        String.format(
+            "starting action: %s with span_id: %s\n",
+            spanName));
+    try (Scope s = span.makeCurrent()){
       if (action.hasAdmin()) {
         return executeAdminAction(useMultiplexedSession, action.getAdmin(), outcomeSender);
       } else if (action.hasStart()) {
@@ -945,11 +997,14 @@ public class CloudClientExecutor extends CloudExecutor {
                     ErrorCode.UNIMPLEMENTED, "Not implemented yet: \n" + action)));
       }
     } catch (Exception e) {
+      span.recordException(e);
       LOGGER.log(Level.WARNING, "Unexpected error: " + e.getMessage());
       return outcomeSender.finishWithError(
           toStatus(
               SpannerExceptionFactory.newSpannerException(
                   ErrorCode.INVALID_ARGUMENT, "Unexpected error: " + e.getMessage())));
+    } finally {
+      span.end();
     }
   }
 
