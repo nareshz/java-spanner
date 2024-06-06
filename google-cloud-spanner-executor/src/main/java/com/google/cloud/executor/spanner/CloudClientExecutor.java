@@ -923,9 +923,9 @@ public class CloudClientExecutor extends CloudExecutor {
     LOGGER.log(
         Level.INFO,
         String.format(
-            "starting action: %s with span_id: %s\n",
-            spanName));
-    try (Scope s = span.makeCurrent()){
+            "starting action: %s with trace_id: %s, span_id: %s\n",
+            spanName, span.getSpanContext().getTraceId(), span.getSpanContext().getSpanId()));
+    try (Scope scope = span.makeCurrent()){
       if (action.hasAdmin()) {
         return executeAdminAction(useMultiplexedSession, action.getAdmin(), outcomeSender);
       } else if (action.hasStart()) {
