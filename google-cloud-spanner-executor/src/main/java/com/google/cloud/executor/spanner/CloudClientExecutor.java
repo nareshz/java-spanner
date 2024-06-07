@@ -151,7 +151,6 @@ import com.google.spanner.v1.TypeAnnotationCode;
 import com.google.spanner.v1.TypeCode;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
@@ -810,6 +809,7 @@ public class CloudClientExecutor extends CloudExecutor {
             .setCredentials(credentials)
             .setChannelProvider(channelProvider)
             .setEnableEndToEndTracing(/* enableEndToEndTracing= */ true)
+            .setOpenTelemetry(WorkerProxy.openTelemetrySdk)
             .setSessionPoolOption(sessionPoolOptions);
 
     SpannerStubSettings.Builder stubSettingsBuilder =
@@ -917,9 +917,10 @@ public class CloudClientExecutor extends CloudExecutor {
       String dbPath,
       boolean useMultiplexedSession,
       ExecutionFlowContext executionContext) {
-    Tracer tracer = GlobalOpenTelemetry.getTracer(CloudClientExecutor.class.getName(), "0.1.0");
+    Tracer tracer = WorkerProxy.openTelemetrySdk.getTracer(CloudClientExecutor.class.getName(), "0.1.0");
     String spanName = "systestaction_" + actionType(action);
-    Span span = tracer.spanBuilder(spanName).startSpan();
+    LOGGER.log(Level.INFO, String.format("starting action: %s", spanName));
+    Span span = tracer.spanBuilder(spanName).setNoParent().startSpan();
     LOGGER.log(
         Level.INFO,
         String.format(

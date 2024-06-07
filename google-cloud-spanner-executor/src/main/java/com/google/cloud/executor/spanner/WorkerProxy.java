@@ -45,8 +45,8 @@ import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
 import io.opentelemetry.context.propagation.ContextPropagators;
-import io.opentelemetry.context.propagation.TextMapPropagator;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 import io.opentelemetry.sdk.trace.samplers.Sampler;
@@ -88,6 +88,7 @@ public class WorkerProxy {
   public static double multiplexedSessionOperationsRatio = 0.0;
   public static boolean usePlainTextChannel = false;
   public static boolean enableGrpcFaultInjector = false;
+  public static OpenTelemetrySdk openTelemetrySdk;
 
   public static CommandLine commandLine;
 
@@ -115,6 +116,56 @@ public class WorkerProxy {
     } catch (Throwable t) {
       throw new RuntimeException(t);
     }
+  }
+
+  public static OpenTelemetrySdk setupOpenTelemetrySdk() throws Exception {
+    // Read credentials from the serviceKeyFile.
+    HttpTransportFactory HTTP_TRANSPORT_FACTORY = NetHttpTransport::new;
+    Credentials credentials =
+        GoogleCredentials.fromStream(
+            new ByteArrayInputStream(
+                FileUtils.readFileToByteArray(new File(serviceKeyFile))),
+            HTTP_TRANSPORT_FACTORY);
+
+    // Create transport channel provider with root certificates for Cloud Trace API calls.
+    int GRPC_MAX_HEADER_LIST_SIZE_BYTES = 10 * 1024 * 1024;
+    NettyChannelBuilder builder =
+        (NettyChannelBuilder)
+            getChannelBuilder("staging-cloudtrace.sandbox.googleapis.com", 443, rootCert)
+                .maxInboundMessageSize(100 * 1024 * 1024 /* 100 MB */);
+    TransportChannel channel =
+        GrpcTransportChannel.newBuilder()
+            .setManagedChannel(
+                builder.maxInboundMetadataSize(GRPC_MAX_HEADER_LIST_SIZE_BYTES).build())
+            .build();
+    TransportChannelProvider transportChannelProvider =
+        FixedTransportChannelProvider.create(channel);
+    // Create Cloud Trace Service Stub.
+    TraceServiceStub traceServiceStub =
+        TraceServiceStubSettings.newBuilder()
+            .setEndpoint("staging-cloudtrace.sandbox.googleapis.com:443")
+            .setTransportChannelProvider(transportChannelProvider)
+            .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
+            .build()
+            .createStub();
+
+    // OpenTelemetry configuration.
+    TraceExporter traceExporter =
+        TraceExporter.createWithConfiguration(
+            TraceConfiguration.builder()
+                .setProjectId("spanner-cloud-systest")
+                .setCredentials(credentials)
+                .setTraceServiceStub(traceServiceStub)
+                .build());
+    return OpenTelemetrySdk.builder()
+        .setTracerProvider(
+            SdkTracerProvider.builder()
+                .addSpanProcessor(BatchSpanProcessor.builder(traceExporter).build())
+                .setResource(Resource.getDefault())
+                .setSampler(Sampler.parentBased(Sampler.traceIdRatioBased(0.01)))
+                .build())
+        .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance()))
+        .buildAndRegisterGlobal();
   }
 
   public static void main(String[] args) throws Exception {
@@ -186,52 +237,7 @@ public class WorkerProxy {
                 + MAX_RATIO);
       }
     }
-    // Read credentials from the serviceKeyFile.
-    HttpTransportFactory HTTP_TRANSPORT_FACTORY = NetHttpTransport::new;
-    Credentials credentials =
-        GoogleCredentials.fromStream(
-            new ByteArrayInputStream(
-                FileUtils.readFileToByteArray(new File(serviceKeyFile))),
-            HTTP_TRANSPORT_FACTORY);
-
-    // Create transport channel provider with root certificates for Cloud Trace API calls.
-    int GRPC_MAX_HEADER_LIST_SIZE_BYTES = 10 * 1024 * 1024;
-    NettyChannelBuilder builder =
-        (NettyChannelBuilder)
-            getChannelBuilder("staging-cloudtrace.sandbox.googleapis.com", 443, rootCert)
-                .maxInboundMessageSize(100 * 1024 * 1024 /* 100 MB */);
-    TransportChannel channel =
-        GrpcTransportChannel.newBuilder()
-            .setManagedChannel(
-                builder.maxInboundMetadataSize(GRPC_MAX_HEADER_LIST_SIZE_BYTES).build())
-            .build();
-    TransportChannelProvider transportChannelProvider =
-        FixedTransportChannelProvider.create(channel);
-    // Create Cloud Trace Service Stub.
-    TraceServiceStub traceServiceStub =
-        TraceServiceStubSettings.newBuilder()
-            .setEndpoint("staging-cloudtrace.sandbox.googleapis.com:443")
-            .setTransportChannelProvider(transportChannelProvider)
-            .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
-            .build()
-            .createStub();
-
-    // OpenTelemetry configuration.
-    TraceExporter traceExporter =
-        TraceExporter.createWithConfiguration(
-            TraceConfiguration.builder()
-                .setProjectId("spanner-cloud-systest")
-                .setCredentials(credentials)
-                .setTraceServiceStub(traceServiceStub)
-                .build());
-    OpenTelemetrySdk.builder()
-        .setTracerProvider(
-            SdkTracerProvider.builder()
-                .addSpanProcessor(BatchSpanProcessor.builder(traceExporter).build())
-                .setSampler(Sampler.parentBased(Sampler.traceIdRatioBased(0.01)))
-                .build())
-        .setPropagators(ContextPropagators.create(TextMapPropagator.composite(W3CTraceContextPropagator.getInstance())))
-        .buildAndRegisterGlobal();
+    openTelemetrySdk = setupOpenTelemetrySdk();
 
     Server server;
     while (true) {

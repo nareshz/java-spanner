@@ -76,6 +76,10 @@ class TraceWrapper {
     return spanBuilderWithExplicitParent(spanName, parentSpan, Attributes.empty());
   }
 
+  ISpan spanBuilderWithExplicitParent(String spanName, ISpan parentSpan, TransactionOption... options) {
+    return spanBuilderWithExplicitParent(spanName, parentSpan, createTransactionAttributes(options));
+  }
+
   ISpan spanBuilderWithExplicitParent(String spanName, ISpan parentSpan, Attributes attributes) {
     if (SpannerOptions.getActiveTracingFramework().equals(TracingFramework.OPEN_TELEMETRY)) {
       OpenTelemetrySpan otParentSpan = (OpenTelemetrySpan) parentSpan;
