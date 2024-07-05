@@ -49,6 +49,7 @@ import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
+import io.opentelemetry.sdk.trace.export.SpanExporter;
 import io.opentelemetry.sdk.trace.samplers.Sampler;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -150,7 +151,7 @@ public class WorkerProxy {
             .createStub();
 
     // OpenTelemetry configuration.
-    TraceExporter traceExporter =
+    SpanExporter spanExporter =
         TraceExporter.createWithConfiguration(
             TraceConfiguration.builder()
                 .setProjectId("spanner-cloud-systest")
@@ -160,7 +161,7 @@ public class WorkerProxy {
     return OpenTelemetrySdk.builder()
         .setTracerProvider(
             SdkTracerProvider.builder()
-                .addSpanProcessor(BatchSpanProcessor.builder(traceExporter).build())
+                .addSpanProcessor(BatchSpanProcessor.builder(spanExporter).build())
                 .setResource(Resource.getDefault())
                 .setSampler(Sampler.parentBased(Sampler.traceIdRatioBased(0.01)))
                 .build())
