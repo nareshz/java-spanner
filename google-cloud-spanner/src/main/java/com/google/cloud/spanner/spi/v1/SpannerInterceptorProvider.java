@@ -23,7 +23,6 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.ClientInterceptor;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.OpenTelemetry;
-import io.opentelemetry.instrumentation.grpc.v1_6.GrpcTelemetry;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,7 +52,6 @@ public class SpannerInterceptorProvider implements GrpcInterceptorProvider {
     defaultInterceptorList.add(
         new LoggingInterceptor(Logger.getLogger(GapicSpannerRpc.class.getName()), Level.FINER));
     defaultInterceptorList.add(new HeaderInterceptor(new SpannerRpcMetrics(openTelemetry)));
-    defaultInterceptorList.add(GrpcTelemetry.create(openTelemetry).newClientInterceptor());
     return new SpannerInterceptorProvider(ImmutableList.copyOf(defaultInterceptorList));
   }
 
