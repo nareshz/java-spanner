@@ -166,7 +166,7 @@ public class WorkerProxy {
                 .setSampler(Sampler.parentBased(Sampler.traceIdRatioBased(0.01)))
                 .build())
         .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance()))
-        .buildAndRegisterGlobal();
+        .build();
   }
 
   public static void main(String[] args) throws Exception {
