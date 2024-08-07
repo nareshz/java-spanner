@@ -932,13 +932,14 @@ public class CloudClientExecutor extends CloudExecutor {
     Tracer tracer = WorkerProxy.openTelemetrySdk.getTracer(CloudClientExecutor.class.getName(), "0.1.0");
     String spanName = "systestaction_" + actionType(action);
     LOGGER.log(Level.INFO, String.format("starting action: %s", spanName));
-    Span span = tracer.spanBuilder(spanName).setNoParent().startSpan();
+    Span span = tracer.spanBuilder(spanName).startSpan();
     // LOGGER.log(
     //     Level.INFO,
     //     String.format(
     //         "starting action: %s with trace_id: %s, span_id: %s\n",
     //         spanName, span.getSpanContext().getTraceId(), span.getSpanContext().getSpanId()));
-    try (Scope scope = span.makeCurrent()){
+    Scope scope = span.makeCurrent();
+    try {
       Status status;
       if (action.hasAdmin()) {
         status = executeAdminAction(useMultiplexedSession, action.getAdmin(), outcomeSender);
@@ -1010,7 +1011,7 @@ public class CloudClientExecutor extends CloudExecutor {
                 SpannerExceptionFactory.newSpannerException(
                     ErrorCode.UNIMPLEMENTED, "Not implemented yet: \n" + action)));
       }
-      scope.close();
+      // scope.close();
       return status;
     } catch (Exception e) {
       // span.recordException(e);
@@ -1020,6 +1021,7 @@ public class CloudClientExecutor extends CloudExecutor {
               SpannerExceptionFactory.newSpannerException(
                   ErrorCode.INVALID_ARGUMENT, "Unexpected error: " + e.getMessage())));
     } finally {
+      scope.close();
       span.end();
     }
   }

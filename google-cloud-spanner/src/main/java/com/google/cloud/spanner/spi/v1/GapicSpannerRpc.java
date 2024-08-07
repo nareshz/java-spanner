@@ -324,6 +324,7 @@ public class GapicSpannerRpc implements SpannerRpc {
     if (initializeStubs) {
       // First check if SpannerOptions provides a TransportChannelProvider. Create one
       // with information gathered from SpannerOptions if none is provided
+      System.out.println("initializeStubs is true");
       InstantiatingGrpcChannelProvider.Builder defaultChannelProviderBuilder =
           InstantiatingGrpcChannelProvider.newBuilder()
               .setChannelConfigurator(options.getChannelConfigurator())
