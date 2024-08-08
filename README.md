@@ -19,7 +19,7 @@ If you are using Maven with [BOM][libraries-bom], add this to your pom.xml file:
     <dependency>
       <groupId>com.google.cloud</groupId>
       <artifactId>libraries-bom</artifactId>
-      <version>26.39.0</version>
+      <version>26.43.0</version>
       <type>pom</type>
       <scope>import</scope>
     </dependency>
@@ -42,7 +42,7 @@ If you are using Maven without the BOM, add this to your dependencies:
 <dependency>
   <groupId>com.google.cloud</groupId>
   <artifactId>google-cloud-spanner</artifactId>
-  <version>6.67.0</version>
+  <version>6.71.0</version>
 </dependency>
 
 ```
@@ -621,7 +621,7 @@ To get help, follow the instructions in the [shared Troubleshooting document][tr
 
 ## Transport
 
-Cloud Spanner uses both gRPC and HTTP/JSON for the transport layer.
+Cloud Spanner uses gRPC for the transport layer.
 
 ## Supported Java Versions
 
