@@ -22,6 +22,7 @@ import com.google.api.gax.grpc.GrpcTransportChannel;
 import com.google.api.gax.rpc.FixedTransportChannelProvider;
 import com.google.api.gax.rpc.TransportChannel;
 import com.google.api.gax.rpc.TransportChannelProvider;
+import com.google.cloud.spanner.spi.v1.TraceContextInterceptor;
 import com.google.common.net.HostAndPort;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
@@ -51,7 +52,7 @@ public class CloudUtil {
   public static TransportChannelProvider newChannelProviderHelper(int port) {
     NettyChannelBuilder builder =
         (NettyChannelBuilder)
-            getChannelBuilderForTestGFE("localhost", port, WorkerProxy.cert, TEST_HOST_IN_CERT)
+            getChannelBuilder("localhost", port, WorkerProxy.cert, TEST_HOST_IN_CERT)
                 .maxInboundMessageSize(100 * 1024 * 1024 /* 100 MB */);
     if (WorkerProxy.usePlainTextChannel) {
       builder.usePlaintext();
@@ -64,7 +65,23 @@ public class CloudUtil {
     return FixedTransportChannelProvider.create(channel);
   }
 
-  public static ManagedChannelBuilder<?> getChannelBuilderForTestGFE(
+  public static TransportChannelProvider newCloudTraceChannelProviderHelper(String host, int port) {
+    NettyChannelBuilder builder =
+        (NettyChannelBuilder)
+            getChannelBuilder(host, port, WorkerProxy.rootCert, "")
+                .maxInboundMessageSize(100 * 1024 * 1024 /* 100 MB */);
+    if (WorkerProxy.usePlainTextChannel) {
+      builder.usePlaintext();
+    }
+    TransportChannel channel =
+        GrpcTransportChannel.newBuilder()
+            .setManagedChannel(
+                builder.maxInboundMetadataSize(GRPC_MAX_HEADER_LIST_SIZE_BYTES).build())
+            .build();
+    return FixedTransportChannelProvider.create(channel);
+  }
+
+  public static ManagedChannelBuilder<?> getChannelBuilder(
       String host, int sslPort, String certPath, String hostInCert) {
     SslContext sslContext;
     try {
@@ -91,6 +108,7 @@ public class CloudUtil {
       return channelBuilder
           .overrideAuthority(hostInCert)
           .sslContext(sslContext)
+          .intercept(new TraceContextInterceptor(WorkerProxy.openTelemetrySdk))
           .negotiationType(NegotiationType.TLS);
     } catch (Throwable t) {
       throw new RuntimeException(t);
